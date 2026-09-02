@@ -5,9 +5,6 @@ from library.lcd.lcd_comm_rev_a import LcdCommRevA
 import requests
 from bs4 import BeautifulSoup
 import psutil
-#from mutagen.mp3 import MP3
-#from mutagen.flac import FLAC
-#from mutagen.id3 import ID3, APIC
 import music_tag
 import math
 from PIL import Image, ImageDraw, ImageFont
@@ -15,7 +12,6 @@ import os
 import io
 import hashlib
 from dataclasses import dataclass
-import math
 import time
 import shutil
 from pathlib import Path
