@@ -224,7 +224,6 @@ def extract_info():
             if os.path.exists(strPictureFilename):
                 try:
                     os.remove(strPictureFilename)
-#                    print(f"file removed: {strPictureFilename}")
                 except:
                     print(f"Failed file remove: {strPictureFilename}")
             strPictureFilename = strWorkDirname + "/" + hash + ".png"
@@ -238,6 +237,7 @@ def extract_info():
             with open(strPictureFilename, "wb") as f:
                 f.write(picture_bytes_io)
 
+# 曲情報に関して更新する
 def draw_music_info(lcd_comm, strText, indexX, indexY, spanY):
     lcd_comm.DisplayProgressBar(x=indexX, y=indexY, 
                                 width=(intCanvasWidth - indexX), height=spanY, 
