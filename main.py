@@ -36,6 +36,7 @@ intCanvasWidth = 320
 intCanvasHeight = 480
 isChangePicture = False
 isChangeMusic = False
+isFirstRun = True
 strPictureHash = ""
 strPictureFilename = ""
 strWorkDirname = "tmp"
@@ -47,14 +48,13 @@ intMPCBE_status = 0
 
 @dataclass
 class TagInfo:
-    strFilepath: str
     strFileExtension: str
     strTitle: str
     strArtist: str
     strAlbum: str
     intLength: int
 
-tagInfo = TagInfo("", "", "", "", "", 0)
+tagInfo = TagInfo("", "", "", "", 0)
 
 # MPCBE が Web サービスが起動しているかをチェックする
 def checkMPCBEListen() -> requests.session:
@@ -130,35 +130,43 @@ def create_background(picture) -> bytes:
     with Image.open(io.BytesIO(picture_data)) as image:
         intShortLength = intCanvasWidth if intCanvasWidth < intCanvasHeight else intCanvasHeight
         image.thumbnail((intShortLength, intShortLength), Image.LANCZOS)
-
-        # 黒で塗りつぶしたキャンバスを用意し、変換した画像を貼り付け、背景イメージとする
-        canvas = Image.new("RGB", (intCanvasWidth, intCanvasHeight), (0, 0, 0))
+        canvas = Image.new("RGB", (intShortLength, intShortLength), (0, 0, 0))
         canvas.paste(image, ((intShortLength - image.width) // 2, (intShortLength- image.height) // 2))
-
-        # 固定文字列を埋め込む
-        draw = ImageDraw.Draw(canvas)
-        indexX = 4
-        indexY = 324
-        font = ImageFont.truetype("NotoSansJP-Black.otf", 14)
-        draw.text((indexX, indexY), "Title", font=font, fill=(255, 255, 255))
-        draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
-        indexY += 20
-        draw.text((indexX, indexY), "Artist", font=font, fill=(255, 255, 255))
-        draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
-        indexY += 20
-        draw.text((indexX, indexY), "Album", font=font, fill=(255, 255, 255))
-        draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
-        indexY += 20
-        draw.text((indexX, indexY), "Audio", font=font, fill=(255, 255, 255))
-        draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
-        indexY += 20
-        draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
-        font = ImageFont.truetype("NotoSansJP-Black.otf", 12.5)
-        draw.text((indexX, indexY+2), "Length", font=font, fill=(255, 255, 255))
-
-        # メモリ上に背景イメージを書き込む
         png_bytes_io = io.BytesIO()
         canvas.save(png_bytes_io, format="PNG")
+
+        if isFirstRun:
+            global strPictureHash 
+            strPictureHash = hashlib.md5(png_bytes_io.getvalue()).hexdigest()
+
+            # 黒で塗りつぶした画面全体のキャンバスを用意し、変換した画像を貼り付け、背景イメージとする
+            canvas = Image.new("RGB", (intCanvasWidth, intCanvasHeight), (0, 0, 0))
+            canvas.paste(image, ((intShortLength - image.width) // 2, (intShortLength - image.height) // 2))
+
+            # 固定文字列を埋め込む
+            draw = ImageDraw.Draw(canvas)
+            indexX = 4
+            indexY = 324
+            font = ImageFont.truetype("NotoSansJP-Black.otf", 14)
+            draw.text((indexX, indexY), "Title", font=font, fill=(255, 255, 255))
+            draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
+            indexY += 20
+            draw.text((indexX, indexY), "Artist", font=font, fill=(255, 255, 255))
+            draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
+            indexY += 20
+            draw.text((indexX, indexY), "Album", font=font, fill=(255, 255, 255))
+            draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
+            indexY += 20
+            draw.text((indexX, indexY), "Audio", font=font, fill=(255, 255, 255))
+            draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
+            indexY += 20
+            draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
+            font = ImageFont.truetype("NotoSansJP-Black.otf", 12.5)
+            draw.text((indexX, indexY+2), "Length", font=font, fill=(255, 255, 255))
+
+            # メモリ上に背景イメージを書き込む
+            png_bytes_io = io.BytesIO()
+            canvas.save(png_bytes_io, format="PNG")
 
         return png_bytes_io.getvalue()
 
@@ -220,7 +228,11 @@ def extract_info():
                 except:
                     print(f"Failed file remove: {strPictureFilename}")
             strPictureFilename = strWorkDirname + "/" + hash + ".png"
-            strPictureHash = hash
+            global isFirstRun
+            if isFirstRun:
+                isFirstRun = False
+            else:
+                strPictureHash = hash
             isChangePicture = True
             # 画像の保存
             with open(strPictureFilename, "wb") as f:
@@ -228,7 +240,7 @@ def extract_info():
 
 def draw_music_info(lcd_comm, strText, indexX, indexY, spanY):
     lcd_comm.DisplayProgressBar(x=indexX, y=indexY, 
-                                width=(intCanvasWidth - indexX), height=(spanY -1), 
+                                width=(intCanvasWidth - indexX), height=spanY, 
                                 min_value=0, max_value=100, value=100, 
                                 bar_outline=False, background_color=(0,0,0))
 
@@ -288,29 +300,29 @@ def main():
                 # Display custom text with solid background
                 indexX = 4
                 indexY = 324
-                if strTitle != tagInfo.strTitle or isChangePicture:
+                if strTitle != tagInfo.strTitle:
                     strTitle = tagInfo.strTitle
                     draw_music_info(lcd_comm, strTitle, indexX + 54, indexY, 20)
                 indexY += 20
 
-                if strArtist != tagInfo.strArtist or isChangePicture:
+                if strArtist != tagInfo.strArtist:
                     strArtist = tagInfo.strArtist
                     draw_music_info(lcd_comm, strArtist, indexX + 54, indexY, 20)
                 indexY += 20
 
-                if strAlbum != tagInfo.strAlbum or isChangePicture:
+                if strAlbum != tagInfo.strAlbum:
                     strAlbum = tagInfo.strAlbum
                     draw_music_info(lcd_comm, strAlbum, indexX + 54, indexY, 20)
                 indexY += 20
 
                 strAudio_tmp = f"{tagInfo.strFileExtension}, {tagInfo.fltSampleRate} Khz, {f'{tagInfo.intBitsPerSample} bit, ' if tagInfo.intBitsPerSample is not None else ''}{tagInfo.fltBitrate} kbit/s"
-                if strAudio != strAudio_tmp or isChangePicture:
+                if strAudio != strAudio_tmp:
                     strAudio = strAudio_tmp
                     draw_music_info(lcd_comm, strAudio, indexX + 54, indexY, 20)
                 indexY += 20
 
                 strLength_tmp = f"{(tagInfo.intLength // 60)} min {(tagInfo.intLength % 60)}  sec"
-                if strLength != strLength_tmp or isChangePicture:
+                if strLength != strLength_tmp:
                     strLength = strLength_tmp
                     draw_music_info(lcd_comm, strLength, indexX + 54, indexY, 20)
                 indexY += 40
