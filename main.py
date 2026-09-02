@@ -64,6 +64,7 @@ def checkMPCBEListen() -> requests.session:
     for conn in psutil.net_connections(kind='inet'):
         if conn.laddr.port == intPortMPCBE and conn.status == psutil.CONN_LISTEN:
             isConnectableMPCBE = True
+            print(f"MPC-BEに再接続可能なため処理を開始します。")
             return session
     isConnectableMPCBE = False
     session.close()
@@ -72,6 +73,7 @@ def checkMPCBEListen() -> requests.session:
 
 # MPCBE から開いているファイルの情報を取得する
 def getMPCBE_variables(session):
+    global isConnectableMPCBE
     if isConnectableMPCBE == False:
         return
 
@@ -80,7 +82,8 @@ def getMPCBE_variables(session):
         response = session.get(url, timeout=10)
         response.raise_for_status()
     except requests.RequestException as e:
-        print(f"URL の取得に失敗しました: {e}")
+        print(f"URL の取得に失敗しました。MPC-BEに再接続可能になるまで待機します。 {e}")
+        isConnectableMPCBE = False
         return
 
     response.encoding = "utf-8"
@@ -353,7 +356,8 @@ def main():
             else:
                 time.sleep(5.0)
     finally:
-        session.close()
+        if session:
+            session.close()
         lcd_comm.Reset()
 
 
