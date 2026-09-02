@@ -1,13 +1,9 @@
-
-# 必要なライブラリをインポート
-from library.lcd.lcd_comm import Orientation
-from library.lcd.lcd_comm_rev_a import LcdCommRevA
-import requests
-from bs4 import BeautifulSoup
-import psutil
-import music_tag
+# 1. 標準ライブラリ
+from dataclasses import dataclass
+import hashlib
+import io
+from itertools import chain
 import math
-from PIL import Image, ImageDraw, ImageFont
 import os
 import io
 import hashlib
@@ -16,9 +12,21 @@ import time
 import shutil
 from pathlib import Path
 import random
-from itertools import chain
-import sys
+import shutil
 import signal
+import sys
+import time
+
+# 2. サードパーティ製
+from bs4 import BeautifulSoup
+import music_tag
+from PIL import Image, ImageDraw, ImageFont
+import psutil
+import requests
+
+# 3. turing-smart-screen-python のライブラリ
+from library.lcd.lcd_comm import Orientation
+from library.lcd.lcd_comm_rev_a import LcdCommRevA
 
 # グローバル変数の定義
 isConnectableMPCBE = False
@@ -170,9 +178,9 @@ def extract_info():
         return
     
     # 1. 共通タグの取得
-    tagInfo.strTitle = str(f['title']) if f['title'] else ''
-    tagInfo.strArtist = str(f['artist']) if f['artist'] else ''
-    tagInfo.strAlbum = str(f['album']) if f['album'] else ''
+    tagInfo.strTitle = str(f['title']) if f['title'] else 'Undefined Title'
+    tagInfo.strArtist = str(f['artist']) if f['artist'] else 'Undefined Artist'
+    tagInfo.strAlbum = str(f['album']) if f['album'] else 'Undefined Album'
     tagInfo.strFileExtension = ext.replace('.', '').upper()
     
     # 2. 共通プロパティの取得
@@ -266,8 +274,8 @@ def main():
                 continue
             
             getMPCBE_variables(session)
-            extract_info()
             if isChangeMusic:
+                extract_info()
                 if intMPCBE_Duration == 0:
                     #普通はあり得ないですが、曲の切り替わりのタイミングで 0 になっている場合は曲情報が取得できていな可能性が高いので、少し時間をおいて再取得する
                     time.sleep(1.0)
@@ -276,39 +284,38 @@ def main():
                     lcd_comm.DisplayBitmap(strPictureFilename)
                     #大量データを送信後のため、バッファ溢れのためのWait処理を追加(バッファ溢れを起こすと画面がおかしくなる)
                     time.sleep(0.2)
-                    isChangePicture = False
 
                 # Display custom text with solid background
                 indexX = 4
                 indexY = 324
-                if strTitle != tagInfo.strTitle:
+                if strTitle != tagInfo.strTitle or isChangePicture:
                     strTitle = tagInfo.strTitle
                     draw_music_info(lcd_comm, strTitle, indexX + 54, indexY, 20)
                 indexY += 20
 
-
-                if strArtist != tagInfo.strArtist:
+                if strArtist != tagInfo.strArtist or isChangePicture:
                     strArtist = tagInfo.strArtist
                     draw_music_info(lcd_comm, strArtist, indexX + 54, indexY, 20)
                 indexY += 20
 
-                if strAlbum != tagInfo.strAlbum:
+                if strAlbum != tagInfo.strAlbum or isChangePicture:
                     strAlbum = tagInfo.strAlbum
                     draw_music_info(lcd_comm, strAlbum, indexX + 54, indexY, 20)
                 indexY += 20
 
                 strAudio_tmp = f"{tagInfo.strFileExtension}, {tagInfo.fltSampleRate} Khz, {f'{tagInfo.intBitsPerSample} bit, ' if tagInfo.intBitsPerSample is not None else ''}{tagInfo.fltBitrate} kbit/s"
-                if strAudio != strAudio_tmp:
+                if strAudio != strAudio_tmp or isChangePicture:
                     strAudio = strAudio_tmp
                     draw_music_info(lcd_comm, strAudio, indexX + 54, indexY, 20)
                 indexY += 20
 
                 strLength_tmp = f"{(tagInfo.intLength // 60)} min {(tagInfo.intLength % 60)}  sec"
-                if strLength != strLength_tmp:
+                if strLength != strLength_tmp or isChangePicture:
                     strLength = strLength_tmp
                     draw_music_info(lcd_comm, strLength, indexX + 54, indexY, 20)
                 indexY += 40
                 isChangeMusic = False
+                isChangePicture = False
             
             if intMPCBE_Duration != intMPCBE_Position:
                 intAssume_Position = intMPCBE_Position
