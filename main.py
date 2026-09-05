@@ -1,28 +1,28 @@
 # 1. 標準ライブラリ
-from dataclasses import dataclass
 import hashlib
 import io
-from itertools import chain
 import math
 import os
-import io
-import hashlib
-from dataclasses import dataclass
-import time
-import shutil
-from pathlib import Path
 import random
+import re
 import shutil
 import signal
 import sys
 import time
 
+from dataclasses import dataclass
+from itertools import chain
+from pathlib import Path
+from typing import Dict
+
 # 2. サードパーティ製
-from bs4 import BeautifulSoup
 import music_tag
-from PIL import Image, ImageDraw, ImageFont
 import psutil
 import requests
+
+from bs4 import BeautifulSoup
+from PIL import Image, ImageDraw, ImageFont
+
 
 # 3. turing-smart-screen-python のライブラリ
 from library.lcd.lcd_comm import Orientation
@@ -45,6 +45,10 @@ strMPCBE_Filepath = ""
 intMPCBE_Position = 0
 intMPCBE_Duration = 0
 intMPCBE_status = 0
+isHaveLyrics = False
+listLyrics = []
+intPoolingInterval = 5
+intPreviewTime = -50
 
 @dataclass
 class TagInfo:
@@ -106,6 +110,8 @@ def getMPCBE_variables(session):
     p_tag = soup.find("p", id = "duration")
     intMPCBE_Duration = (int)(p_tag.get_text(strip=True))
 
+
+# 背景を作成する
 def create_background(picture) -> bytes:
     # 画像が無い場合は同一ディレクトリに *cover*.jpg または *cover*.png が無いかを検索する
     if picture == None:
@@ -134,7 +140,7 @@ def create_background(picture) -> bytes:
         intShortLength = intCanvasWidth if intCanvasWidth < intCanvasHeight else intCanvasHeight
         image.thumbnail((intShortLength, intShortLength), Image.LANCZOS)
         canvas = Image.new("RGB", (intShortLength, intShortLength), (0, 0, 0))
-        canvas.paste(image, ((intShortLength - image.width) // 2, (intShortLength- image.height) // 2))
+        canvas.paste(image, ((intShortLength - image.width) // 2, (intShortLength - image.height) // 2))
         png_bytes_io = io.BytesIO()
         canvas.save(png_bytes_io, format="PNG")
 
@@ -150,7 +156,7 @@ def create_background(picture) -> bytes:
             draw = ImageDraw.Draw(canvas)
             indexX = 4
             indexY = 324
-            font = ImageFont.truetype("NotoSansJP-Black.otf", 14)
+            font = ImageFont.truetype("segoeui.ttf", 14)
             draw.text((indexX, indexY), "Title", font=font, fill=(255, 255, 255))
             draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
             indexY += 20
@@ -163,9 +169,8 @@ def create_background(picture) -> bytes:
             draw.text((indexX, indexY), "Audio", font=font, fill=(255, 255, 255))
             draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
             indexY += 20
+            draw.text((indexX, indexY), "Length", font=font, fill=(255, 255, 255))
             draw.text((indexX + 44, indexY), " : ", font=font, fill=(255, 255, 255))
-            font = ImageFont.truetype("NotoSansJP-Black.otf", 12.5)
-            draw.text((indexX, indexY+2), "Length", font=font, fill=(255, 255, 255))
 
             # メモリ上に背景イメージを書き込む
             png_bytes_io = io.BytesIO()
@@ -174,6 +179,7 @@ def create_background(picture) -> bytes:
         return png_bytes_io.getvalue()
 
 
+# 曲情報を取得する
 def extract_info():
     ext = os.path.splitext(strMPCBE_Filepath)[1].lower()
     
@@ -240,15 +246,87 @@ def extract_info():
             with open(strPictureFilename, "wb") as f:
                 f.write(picture_bytes_io)
 
-# 曲情報に関して更新する
+# 歌詞情報があれば読み込む
+def readLyrics():
+    # 歌詞ファイルが存在するかをチェックする
+    global isHaveLyrics
+    lyrics_path = Path(strMPCBE_Filepath).with_suffix(".lrc")
+    if lyrics_path.exists():
+        isHaveLyrics = True
+    elif (lyrics_path.parent / "Lyrics" / lyrics_path.name).exists():
+        lyrics_path = lyrics_path.parent / "Lyrics" / lyrics_path.name
+        isHaveLyrics = True
+    else:
+        isHaveLyrics = False
+        return
+
+    global listLyrics
+    listLyrics.clear()
+
+    # 1. まず1回、文字コードを判定するため「だけ」にファイルを開く（2段構え）
+    detected_encoding: str = "utf-8"
+    try:
+        # ファイル全体を「読む」のではなく、正しくデコードできるかスキャンするだけ
+        # (内部的には一瞬で終わり、変数に保存しないのでメモリは即座に解放されます)
+        lyrics_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        detected_encoding = "cp932"
+
+    # 2. 確定した文字コードで「ファイルオブジェクト」を直接ループで回す
+    result = {}
+    with open(lyrics_path, "r", encoding=detected_encoding) as text_file:
+        line_pat = re.compile(r'(\[(?:\d+[:.]\d+(?:\.\d+)?)\])+([^\[]*)')
+        tag_pat  = re.compile(r'\[(\d+[:.]\d+(?:\.\d+)?)\]')
+        for lines in text_file:
+            line: str = lines.strip()
+            if line:
+                line_match = line_pat.match(line.strip())
+                if not line_match:
+                    continue                         # タグが無い行はスキップ
+                tags_part, lyric = line_match.groups()
+                lyric = lyric.strip()                # 歌詞の前後空白除去
+                for tag in tag_pat.findall(tags_part):
+                    try:
+                        ms = _timestamp_to_ms(tag)
+                    except ValueError as e:
+                        # 不正なタイムタグは無視（必要なら例外を再送出）
+                        continue
+                    result[ms] = lyric
+    if len(result) != 0:
+        listLyrics = list(sorted(result.items()))
+
+
+# LRC のタイムスタンプ文字列をミリ秒に変換する。
+def _timestamp_to_ms(ts: str) -> int:
+    minute_part, sec_frac = ts.split(':', 1)
+    minutes = int(minute_part)
+
+    # 秒と小数部に分割
+    if '.' in sec_frac:
+        seconds_str, frac_str = sec_frac.split('.', 1)
+    else:
+        seconds_str, frac_str = sec_frac, ''
+
+    seconds = int(seconds_str)
+
+    # 小数部の桁数で倍率を決める（centi‑seconds → ×10、milliseconds → ×1）
+    if len(frac_str) == 0:          # . が無いケースは 0 ms
+        millis = 0
+    else:        # centi‑seconds (例: .80)
+        millis = int(frac_str[:1].ljust(3, '0'))
+
+    return (minutes * 60 + seconds) * 1000 + millis
+
+
+# 曲情報に関して画面更新する
 def draw_music_info(lcd_comm, strText, indexX, indexY, spanY):
     lcd_comm.DisplayProgressBar(x=indexX, y=indexY, 
-                                width=(intCanvasWidth - indexX), height=spanY, 
+                                width=(intCanvasWidth - indexX), height=spanY+1, 
                                 min_value=0, max_value=100, value=100, 
                                 bar_outline=False, background_color=(0,0,0))
 
     lcd_comm.DisplayText(strText, x=indexX, y=indexY,
-                        font="NotoSansJP-Black.otf",
+                        font="NotoSansJP-Regular.otf",
                         font_size=14,
                         font_color=(255, 255, 255),
                         background_color=(0, 0, 0))
@@ -290,11 +368,16 @@ def main():
             
             getMPCBE_variables(session)
             if isChangeMusic:
+                intAssume_Position = 0
+                intLyricsIndex = -1
                 extract_info()
+                readLyrics()
                 if intMPCBE_Duration == 0:
                     #普通はあり得ないですが、曲の切り替わりのタイミングで 0 になっている場合は曲情報が取得できていな可能性が高いので、少し時間をおいて再取得する
                     time.sleep(1.0)
                     getMPCBE_variables(session)
+                    readLyrics()
+                    print("あれ？")
                 if isChangePicture:
                     lcd_comm.DisplayBitmap(strPictureFilename)
                     #大量データを送信後のため、バッファ溢れのためのWait処理を追加(バッファ溢れを起こすと画面がおかしくなる)
@@ -305,52 +388,96 @@ def main():
                 indexY = 324
                 if strTitle != tagInfo.strTitle:
                     strTitle = tagInfo.strTitle
-                    draw_music_info(lcd_comm, strTitle, indexX + 54, indexY, 20)
+                    draw_music_info(lcd_comm, strTitle, indexX + 55, indexY, 20)
                 indexY += 20
 
                 if strArtist != tagInfo.strArtist:
                     strArtist = tagInfo.strArtist
-                    draw_music_info(lcd_comm, strArtist, indexX + 54, indexY, 20)
+                    draw_music_info(lcd_comm, strArtist, indexX + 55, indexY, 20)
                 indexY += 20
 
                 if strAlbum != tagInfo.strAlbum:
                     strAlbum = tagInfo.strAlbum
-                    draw_music_info(lcd_comm, strAlbum, indexX + 54, indexY, 20)
+                    draw_music_info(lcd_comm, strAlbum, indexX + 55, indexY, 20)
                 indexY += 20
 
                 strAudio_tmp = f"{tagInfo.strFileExtension}, {tagInfo.fltSampleRate} Khz, {f'{tagInfo.intBitsPerSample} bit, ' if tagInfo.intBitsPerSample is not None else ''}{tagInfo.fltBitrate} kbit/s"
                 if strAudio != strAudio_tmp:
                     strAudio = strAudio_tmp
-                    draw_music_info(lcd_comm, strAudio, indexX + 54, indexY, 20)
+                    draw_music_info(lcd_comm, strAudio, indexX + 55, indexY, 20)
                 indexY += 20
 
                 strLength_tmp = f"{(tagInfo.intLength // 60)} min {(tagInfo.intLength % 60)}  sec"
                 if strLength != strLength_tmp:
                     strLength = strLength_tmp
-                    draw_music_info(lcd_comm, strLength, indexX + 54, indexY, 20)
-                indexY += 40
+                    draw_music_info(lcd_comm, strLength, indexX + 55, indexY, 20)
                 isChangeMusic = False
                 isChangePicture = False
-            
+
+                indexY = 430
+                lcd_comm.DisplayProgressBar(x=0, y=430, 
+                            width=intCanvasWidth, height=50, 
+                            min_value=0, max_value=100, value=100, 
+                            bar_color=(0, 0, 0), bar_outline=False, background_color=(0, 0, 0))
+                global isHaveLyrics
+                if isHaveLyrics:
+                    lcd_comm.DisplayProgressBar(x=0, y=450, 
+                                                width=intCanvasWidth, height=1,
+                                                min_value=0, max_value=100, value=100,
+                                                bar_color=(192, 192, 192), bar_outline=False, background_color=(0,0,0))
+                                
+
             if intMPCBE_Duration != intMPCBE_Position:
+                if isHaveLyrics: 
+                    indexY = 430
+                else:
+                    indexY = 445
+
+                if intAssume_Position > intMPCBE_Position or abs(intMPCBE_Position - intAssume_Position) > intPoolingInterval * 2:
+                    #曲内の巻き戻しまたは早送りがあったものとする
+                    intLyricsIndex = -1
+
                 intAssume_Position = intMPCBE_Position
                 startTime = time.time()
                 try:
-                    while time.time() < (startTime + 5.0):
+                    while time.time() < (startTime + intPoolingInterval):
                         lcd_comm.DisplayProgressBar(x=indexX, y=indexY,
                                                     width=(intCanvasWidth - 8), height=10,
                                                     min_value=0, max_value=intMPCBE_Duration, value=intAssume_Position,
                                                     bar_color=(64, 64, 64), bar_outline=True,
                                                     background_color=(0, 0, 0))
                         if intMPCBE_status == 2:
-                            intAssume_Position = intMPCBE_Position + (int)((time.time() - startTime) * 1000)
-                            if intAssume_Position <= intMPCBE_Duration:
-                                time.sleep(0.5)
-                            elif intMPCBE_Duration < intAssume_Position:
-                                time.sleep(0.5)
-                                break
+                            if isHaveLyrics:
+                                for i in range(10): 
+                                    intAssume_Position = intMPCBE_Position + (int)((time.time() - startTime) * 1000)
+                                    if intMPCBE_Duration < intAssume_Position:
+                                        break
+                                    if intLyricsIndex == -1:
+                                        intLyricsIndex = 0
+                                        while True:
+                                            if intAssume_Position - listLyrics[intLyricsIndex][0] <= 0:
+                                                if intLyricsIndex == 1:
+                                                    intLyricsIndex = 0
+                                                break
+                                            else:
+                                                intLyricsIndex += 1
+                                                if intLyricsIndex == len(listLyrics):
+                                                    intLyricsIndex = len(listLyrics) - 1
+                                                    break
+                                    if intLyricsIndex < len(listLyrics) and intAssume_Position - listLyrics[intLyricsIndex][0] > intPreviewTime:
+                                        draw_music_info(lcd_comm, listLyrics[intLyricsIndex][1], 4, 452, 20)
+                                        intLyricsIndex += 1
+                                    else:
+                                        time.sleep(0.1)
+                            else:
+                                intAssume_Position = intMPCBE_Position + (int)((time.time() - startTime) * 1000)
+                                if intAssume_Position <= intMPCBE_Duration:
+                                    time.sleep(1.0)
+                                elif intMPCBE_Duration < intAssume_Position:
+                                    break
                         else:
                             time.sleep(1.0)
+                            intLyricsIndex = -1
                 except Exception:
                     print(f"進捗バーの表示でエラー？ Duration : {intMPCBE_Duration} , Position: {intMPCBE_Position}, AssumePosition: {intAssume_Position}")
             else:
