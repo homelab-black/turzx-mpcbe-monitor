@@ -358,6 +358,7 @@ def main():
     strAlbum = ""
     strAudio = ""
     strLength = ""
+    strLyrics = ""
     try:
         while True:
             if not isConnectableMPCBE:
@@ -465,8 +466,10 @@ def main():
                                                     intLyricsIndex = len(listLyrics) - 1
                                                     break
                                     if intLyricsIndex < len(listLyrics) and intAssume_Position - listLyrics[intLyricsIndex][0] > intPreviewTime:
-                                        draw_music_info(lcd_comm, listLyrics[intLyricsIndex][1], 4, 452, 20)
-                                        intLyricsIndex += 1
+                                        if strLyrics != listLyrics[intLyricsIndex][1]:
+                                            draw_music_info(lcd_comm, listLyrics[intLyricsIndex][1], 4, 452, 20)
+                                            intLyricsIndex += 1
+                                            strLyrics = lcd_comm, listLyrics[intLyricsIndex][1]
                                     else:
                                         time.sleep(0.1)
                             else:
