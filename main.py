@@ -468,8 +468,8 @@ def main():
                                     if intLyricsIndex < len(listLyrics) and intAssume_Position - listLyrics[intLyricsIndex][0] > intPreviewTime:
                                         if strLyrics != listLyrics[intLyricsIndex][1]:
                                             draw_music_info(lcd_comm, listLyrics[intLyricsIndex][1], 4, 452, 20)
+                                            strLyrics = listLyrics[intLyricsIndex][1]
                                             intLyricsIndex += 1
-                                            strLyrics = lcd_comm, listLyrics[intLyricsIndex][1]
                                     else:
                                         time.sleep(0.1)
                             else:
@@ -481,8 +481,8 @@ def main():
                         else:
                             time.sleep(1.0)
                             intLyricsIndex = -1
-                except Exception:
-                    print(f"進捗バーの表示でエラー？ Duration : {intMPCBE_Duration} , Position: {intMPCBE_Position}, AssumePosition: {intAssume_Position}")
+                except Exception as e:
+                    print(f"進捗バーの表示でエラー？ Duration : {intMPCBE_Duration} , Position: {intMPCBE_Position}, AssumePosition: {intAssume_Position}, {e}")
             else:
                 time.sleep(5.0)
     finally:
