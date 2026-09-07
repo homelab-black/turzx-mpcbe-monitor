@@ -117,7 +117,7 @@ class MpcbeHandler:
         self.tag_info.title = str(f["title"]) if f["title"] else "Undefined Title"
         self.tag_info.artist = str(f["artist"]) if f["artist"] else "Undefined Artist"
         self.tag_info.album = str(f["album"]) if f["album"] else "Undefined Album"
-        self.tag_info.file_extension = (Path(self.mpcbe_filepath).suffix).upper()
+        self.tag_info.file_extension = (Path(self.mpcbe_filepath).suffix[1:]).upper()
 
         # cue ファイルの存在チェック
         if Path(self.mpcbe_filepath).with_suffix(".cue").exists():
@@ -137,7 +137,6 @@ class MpcbeHandler:
             self.tag_info.bits_per_sample = int(f.mfile.info.bits_per_sample)
         else:
             self.tag_info.bits_per_sample = None
-
 
         if f["artwork"]:
             art_list = f["artwork"].values
