@@ -34,7 +34,7 @@ class LcdController:
     def display_text(self, text: str, x: int, y: int, height: int, font: str, font_size: int, font_color: tuple, background_color: tuple):
         """ 指定されたテキストをLCDに表示する。文字の位置、フォント、サイズ、色などを設定可能。事前に表示領域を指定された高さで塗りつぶす """
         try:
-            self.lcd_comm.DisplayProgressBar(x=x, y=y,
+            self.lcd_comm.DisplayProgressBar(x=x, y=y + 1,
                                              width=(self.canvas_width - x), height=height + 1,
                                              min_value=0, max_value=100, value=100,
                                              bar_outline=False, background_color=background_color)
