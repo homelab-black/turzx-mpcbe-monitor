@@ -1,7 +1,8 @@
-requests
 beautifulsoup4
+mutagen
 numpy
 pillow
 psutil
 pyserial
-TinyTag
+pytaglib
+requests

@@ -22,9 +22,10 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import mutagen
 import psutil
 import requests
-from tinytag import TinyTag
+import taglib
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 
@@ -57,6 +58,7 @@ class MpcbeHandler:
         self.is_change_picture = False
         self.is_first_run = True
         self.is_have_cue = False
+        self.is_have_lyrics = False
         self.picture_hash = ""
         self.picture_filename = ""
         self.lyrics = []
@@ -107,45 +109,76 @@ class MpcbeHandler:
         """ ファイルから各種情報を取得する """
         picture = None
         try:
-            #f = music_tag.load_file(self.mpcbe_filepath)
-            f = TinyTag.get(self.mpcbe_filepath, image=True)
+            tag_info = taglib.File(self.mpcbe_filepath)
         except Exception:
-            print(f"未対応のファイルです。 {self.mpcbe_filepath}")
-            self.is_change_music = False
+            print(f"taglib未対応のファイルです。 {self.mpcbe_filepath}")
+            self.tag_info.title = "Not Support Format"
+            self.tag_info.artist = "Not Support Format"
+            self.tag_info.album = "Not Support Format"
+            self.tag_info.file_extension = (Path(self.mpcbe_filepath).suffix[1:]).upper()
             return
-
-        self.tag_info.title = f.title if f.title else "Undefined Title"
-        self.tag_info.artist = f.artist if f.artist else "Undefined Artist"
-        self.tag_info.album = f.album if f.album else "Undefined Album"
+        
+        self.tag_info.title = tag_info.tags["TITLE"][0] if ("TITLE" in tag_info.tags) else "Undefined Title"
+        self.tag_info.artist = tag_info.tags["ARTIST"][0] if ("ARTIST" in tag_info.tags) else "Undefined Artist"
+        self.tag_info.album = tag_info.tags["ALBUM"][0] if ("ALBUM" in tag_info.tags) else "Undefined Album"
         self.tag_info.file_extension = (Path(self.mpcbe_filepath).suffix[1:]).upper()
 
+        try:
+            audio_info = mutagen.File(self.mpcbe_filepath).info
+        except Exception:
+            self.tag_info.sample_rate = None
+            self.tag_info.bitrate = None
+            self.tag_info.length = math.ceil(self.mpcbe_duration / 1000)
+            self.tag_info.bits_per_sample = None
+            print(f"mutagen未対応のファイルです。 {self.mpcbe_filepath}")
+        
+        self.tag_info.sample_rate = round(float(audio_info.sample_rate) / 1000, 1) if hasattr(audio_info, "sample_rate") else None
+        self.tag_info.bitrate = round(float(audio_info.bitrate) / 1000, 1) if hasattr(audio_info, "bitrate") else None
+        self.tag_info.length = math.ceil(audio_info.length) if hasattr(audio_info, "length") else math.ceil(self.mpcbe_duration / 1000)
+        self.tag_info.bits_per_sample = audio_info.bits_per_sample if hasattr(audio_info, "bits_per_sample") else None
+        if self.tag_info.bits_per_sample != None and self.tag_info.bits_per_sample == 0:
+            # mutagen で取得したbitrateが0の場合は表示させないようにする
+            self.tag_info.bits_per_sample = None
+
         # cue ファイルの存在チェック
-        if Path(self.mpcbe_filepath).with_suffix(".cue").exists():
+        filepath = Path(self.mpcbe_filepath)
+        cue_path = filepath.with_suffix(".cue")
+        tag_cue_path = filepath.with_name(filepath.stem + "_tag.cue")
+        if cue_path.exists():
             self.is_have_cue = True
-            self.read_cuefile(Path(self.mpcbe_filepath).with_suffix(".cue"))
+            self.read_cuefile(cue_path)
+        elif tag_cue_path.exists():
+            self.is_have_cue = True
+            self.read_cuefile(tag_cue_path)
         else:
             self.is_have_cue = False
 
-        self.tag_info.sample_rate = round(float(f.samplerate) / 1000, 1) if f.samplerate else None
-        self.tag_info.bitrate = round(f.bitrate, 1) if f.bitrate else None
-        self.tag_info.length = math.ceil(float(f.duration))
-        self.tag_info.bits_per_sample = f.bitdepth if f.bitdepth else None
-
         if self.is_change_music:
             # 歌詞の読み込み(曲データまたは歌詞データがあれば)
-            if f.extra:
-                self.read_lyrics(f.extra.get('lyrics'))
-                self.is_have_lyrics = True
+            if "LYRICS" in tag_info.tags:
+                self.read_lyrics(tag_info.tags["LYRICS"][0])
+                if len(self.lyrics) != 0:
+                    self.is_have_lyrics = True
             else:
                 self.check_lyrics()
 
             # 画像データの読み込み(存在しなければNone)
-            if f.images.front_cover:
-                picture = f.images.front_cover
-                picture_data = picture.data
-            elif f.images.any:
-                picture = f.images.any
-                picture_data = picture.data
+            if tag_info.pictures:
+                index_tmp = -1
+
+                for i, art in enumerate(tag_info.pictures):
+                    if art.picture_type == "Front Cover":
+                        index_tmp = i
+                        break
+                    if art.picture_type == "Other" and index_tmp == -1:
+                        index_tmp = i
+                    
+                # ・ループが終わって、index_tmp が -1 なら、index を 0、それ以外なら index に index_tmp を代入
+                if index_tmp == -1:
+                    target_index = 0
+                else:
+                    target_index = index_tmp
+                picture_data = tag_info.pictures[target_index].data
 
             if not picture:
                 current_dir = Path(self.mpcbe_filepath).parent
@@ -158,11 +191,15 @@ class MpcbeHandler:
                     ("cover", ".png"),
                     ("cover", ".jpg"),
                     ("cover", ".jpeg"),
+                    ("front", ".png"),
                     ("front", ".jpg"),
-                    ("folder", ".jpg")
+                    ("front", ".jpeg"),
+                    ("folder", ".png"),
+                    ("folder", ".jpg"),
+                    ("folder", ".jpeg"),
                 ]
 
-                # 1回の走査結果から、条件に合致する最初の1枚を特定する
+                # 条件に合致する最初の1枚を特定する
                 target_picture = next(
                     (
                         obj_p for str_key, str_suf in list_conditions
@@ -263,7 +300,6 @@ class MpcbeHandler:
             lyrics_path = lyrics_path.parent / "Lyrics" / lyrics_path.name
             self.is_have_lyrics = True
         else:
-            self.is_have_lyrics = False
             return
 
         detected_encoding: str = "utf-8"

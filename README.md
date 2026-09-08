@@ -16,6 +16,7 @@ https://github.com/mathoudebine/turing-smart-screen-python/tree/main
 ### TURZX は縦置きを想定
 
 ### 実行方法
+pip install -r requirements.txt
 python main.py
 
 ### その他
