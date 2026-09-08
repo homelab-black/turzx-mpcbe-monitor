@@ -180,7 +180,7 @@ class MpcbeHandler:
                 picture_data = tag_info.pictures[target_index].data
 
             # フォルダ内に画像が無いかを検索(存在しなければNone)
-            if not picture:
+            else:
                 current_dir = Path(self.mpcbe_filepath).parent
                 # 1回だけフォルダ内をスキャンし、ファイルをリスト化 (NASなどのリモートの場合を見据えてアクセス回数を削減)
                 list_files = list(current_dir.iterdir()) if current_dir.is_dir() else []
