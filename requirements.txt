@@ -1,5 +1,7 @@
 requests
 beautifulsoup4
-psutil
-music-tag
+numpy
 pillow
+psutil
+pyserial
+TinyTag

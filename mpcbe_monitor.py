@@ -20,12 +20,11 @@ import os
 import random
 import re
 from dataclasses import dataclass
-from itertools import chain
 from pathlib import Path
 
-import music_tag
 import psutil
 import requests
+from tinytag import TinyTag
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 
@@ -108,15 +107,16 @@ class MpcbeHandler:
         """ ファイルから各種情報を取得する """
         picture = None
         try:
-            f = music_tag.load_file(self.mpcbe_filepath)
+            #f = music_tag.load_file(self.mpcbe_filepath)
+            f = TinyTag.get(self.mpcbe_filepath, image=True)
         except Exception:
             print(f"未対応のファイルです。 {self.mpcbe_filepath}")
             self.is_change_music = False
             return
 
-        self.tag_info.title = str(f["title"]) if f["title"] else "Undefined Title"
-        self.tag_info.artist = str(f["artist"]) if f["artist"] else "Undefined Artist"
-        self.tag_info.album = str(f["album"]) if f["album"] else "Undefined Album"
+        self.tag_info.title = f.title if f.title else "Undefined Title"
+        self.tag_info.artist = f.artist if f.artist else "Undefined Artist"
+        self.tag_info.album = f.album if f.album else "Undefined Album"
         self.tag_info.file_extension = (Path(self.mpcbe_filepath).suffix[1:]).upper()
 
         # cue ファイルの存在チェック
@@ -126,52 +126,68 @@ class MpcbeHandler:
         else:
             self.is_have_cue = False
 
-        self.tag_info.sample_rate = round(float(f.mfile.info.sample_rate) / 1000, 1)
-        if hasattr(f.mfile.info, "bitrate") and f.mfile.info.bitrate:
-            self.tag_info.bitrate = round(float(f.mfile.info.bitrate) / 1000, 1)
-        else:
-            self.tag_info.bitrate = None
-        self.tag_info.length = math.ceil(float(f.mfile.info.length))
-
-        if hasattr(f.mfile.info, "bits_per_sample") and f.mfile.info.bits_per_sample:
-            self.tag_info.bits_per_sample = int(f.mfile.info.bits_per_sample)
-        else:
-            self.tag_info.bits_per_sample = None
-
-        if f["artwork"]:
-            art_list = f["artwork"].values
-            index_tmp = -1
-
-            for i, art in enumerate(art_list):
-                raw_data = getattr(art, "raw", None)
-                art_type = getattr(raw_data, "type", None) if raw_data is not None else None
-
-                # ・Type=3 が見つかったら、そのindex_tmpに代入してbreak
-                if art_type == 3:
-                    index_tmp = i
-                    break
-
-                # ・Type=0が見つかったら、index_tmp に代入。
-                elif art_type == 0:
-                    if index_tmp == -1:
-                        index_tmp = i
-
-            # ・ループが終わって、index_tmp が -1 なら、index を 0、それ以外なら index に index_tmp を代入
-            if index_tmp == -1:
-                target_index = 0
-            else:
-                target_index = index_tmp
-            picture = art_list[target_index]
+        self.tag_info.sample_rate = round(float(f.samplerate) / 1000, 1) if f.samplerate else None
+        self.tag_info.bitrate = round(f.bitrate, 1) if f.bitrate else None
+        self.tag_info.length = math.ceil(float(f.duration))
+        self.tag_info.bits_per_sample = f.bitdepth if f.bitdepth else None
 
         if self.is_change_music:
             # 歌詞の読み込み(曲データまたは歌詞データがあれば)
-            if f["lyrics"]:
-                self.read_lyrics(str(f["lyrics"]))
+            if f.extra:
+                self.read_lyrics(f.extra.get('lyrics'))
                 self.is_have_lyrics = True
             else:
                 self.check_lyrics()
+
+            # 画像データの読み込み(存在しなければNone)
+            if f.images.front_cover:
+                picture = f.images.front_cover
+                picture_data = picture.data
+            elif f.images.any:
+                picture = f.images.any
+                picture_data = picture.data
+
+            if not picture:
+                current_dir = Path(self.mpcbe_filepath).parent
+                # 1回だけフォルダ内をスキャンし、ファイルをリスト化 (NASなどのリモートの場合を見据えてアクセス回数を削減)
+                list_files = list(current_dir.iterdir()) if current_dir.is_dir() else []
+
+                # 優先順位順の条件リスト (キーワード, 拡張子)
+                # Folder.jpg はキーワードが "folder" で拡張子が ".jpg" と定義
+                list_conditions = [
+                    ("cover", ".png"),
+                    ("cover", ".jpg"),
+                    ("cover", ".jpeg"),
+                    ("front", ".jpg"),
+                    ("folder", ".jpg")
+                ]
+
+                # 1回の走査結果から、条件に合致する最初の1枚を特定する
+                target_picture = next(
+                    (
+                        obj_p for str_key, str_suf in list_conditions
+                        for obj_p in list_files
+                        if (str_key in obj_p.name.lower() and obj_p.suffix.lower() == str_suf)
+                        # Folder.jpg の完全一致に対応するため、Folder.jpg の時だけ完全一致にする場合は以下
+                        if (str_key == "folder" and obj_p.name.lower() == "folder.jpg") or 
+                        (str_key != "folder" and str_key in obj_p.name.lower() and obj_p.suffix.lower() == str_suf)
+                    ),
+                    None
+                )
+
+                if target_picture is None:
+                    dir_path = Path(self.default_pictures)
+                    files = [p for p in dir_path.iterdir() if p.is_file()]
+                    if files:
+                        target_picture = random.choice(files)
+                    else:
+                        print("デフォルト背景が選択できませんでした")
+                with open(target_picture, 'rb') as f:
+                    image_bytes = f.read()
+                    picture_data = image_bytes
+                
             # 画像の読み込み
-            picture_bytes_io = self.create_background(picture)
+            picture_bytes_io = self.create_background(picture_data)
 
             hash_value = hashlib.md5(picture_bytes_io).hexdigest()
 
@@ -190,28 +206,8 @@ class MpcbeHandler:
                 with open(self.picture_filename, "wb") as f:
                     f.write(picture_bytes_io)
 
-    def create_background(self, picture) -> bytes:
-        """ MPC-BEから取得したファイルのタグ情報を抽出し、TagInfoオブジェクトを更新する """
-        if picture is None:
-            current_file = Path(self.mpcbe_filepath)
-            png_files = current_file.parent.glob("*cover*.png")
-            jpg_files = current_file.parent.glob("*cover*.jpg")
-            jpeg_files = current_file.parent.glob("*cover*.jpeg")
-            target_picture = next(chain(png_files, jpg_files, jpeg_files), None)
-
-            if target_picture is None:
-                dir_path = Path(self.default_pictures)
-                files = [p for p in dir_path.iterdir() if p.is_file()]
-                if files:
-                    target_picture = random.choice(files)
-                else:
-                    print("デフォルト背景が選択できませんでした")
-            with open(target_picture, 'rb') as f:
-                image_bytes = f.read()
-                picture_data = image_bytes
-        else:
-            picture_data = picture.data
-
+    def create_background(self, picture_data) -> bytes:
+        """ MPC-BEから取得したタグ情報から背景を描画する """
         with Image.open(io.BytesIO(picture_data)) as image:
             short_length = 320
             orig_w, orig_h = image.size
