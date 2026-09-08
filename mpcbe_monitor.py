@@ -141,15 +141,16 @@ class MpcbeHandler:
             self.tag_info.bits_per_sample = None
 
         # cue ファイルの存在チェック
+        # 手元のコレクションでは、ファイル名.cue と ファイル名_tag.cue の両方が存在した場合、_tag.cue の方が曲名が入っていることが多かったため、この順序にしています。
         filepath = Path(self.mpcbe_filepath)
         cue_path = filepath.with_suffix(".cue")
         tag_cue_path = filepath.with_name(filepath.stem + "_tag.cue")
-        if cue_path.exists():
-            self.is_have_cue = True
-            self.read_cuefile(cue_path)
-        elif tag_cue_path.exists():
+        if tag_cue_path.exists():
             self.is_have_cue = True
             self.read_cuefile(tag_cue_path)
+        elif cue_path.exists():
+            self.is_have_cue = True
+            self.read_cuefile(cue_path)
         else:
             self.is_have_cue = False
 
@@ -165,14 +166,12 @@ class MpcbeHandler:
             # 画像データの読み込み(存在しなければNone)
             if tag_info.pictures:
                 index_tmp = -1
-
                 for i, art in enumerate(tag_info.pictures):
                     if art.picture_type == "Front Cover":
                         index_tmp = i
                         break
                     if art.picture_type == "Other" and index_tmp == -1:
                         index_tmp = i
-                    
                 # ・ループが終わって、index_tmp が -1 なら、index を 0、それ以外なら index に index_tmp を代入
                 if index_tmp == -1:
                     target_index = 0
@@ -180,6 +179,7 @@ class MpcbeHandler:
                     target_index = index_tmp
                 picture_data = tag_info.pictures[target_index].data
 
+            # フォルダ内に画像が無いかを検索(存在しなければNone)
             if not picture:
                 current_dir = Path(self.mpcbe_filepath).parent
                 # 1回だけフォルダ内をスキャンし、ファイルをリスト化 (NASなどのリモートの場合を見据えてアクセス回数を削減)
@@ -212,6 +212,7 @@ class MpcbeHandler:
                     None
                 )
 
+                # 画像ファイルが見つからなかった場合はデフォルトの画像をランダムで抽出
                 if target_picture is None:
                     dir_path = Path(self.default_pictures)
                     files = [p for p in dir_path.iterdir() if p.is_file()]
@@ -225,9 +226,7 @@ class MpcbeHandler:
                 
             # 画像の読み込み
             picture_bytes_io = self.create_background(picture_data)
-
             hash_value = hashlib.md5(picture_bytes_io).hexdigest()
-
             if self.picture_hash != hash_value:
                 if os.path.exists(self.picture_filename):
                     try:
@@ -311,7 +310,6 @@ class MpcbeHandler:
             text = f.read()
             self.read_lyrics(text)
 
-
     def read_lyrics(self, lyrics: str):
         """ 歌詞データの取り込み （複数言語の場合は同一時刻で複数行となるがその場合最後の行が優先される。（どの言語を表示すればよいか判断不能）"""
         self.lyrics.clear()
@@ -338,7 +336,6 @@ class MpcbeHandler:
     def read_cuefile(self, cue_filename: Path):
         """ CUEファイルの内容をリスト形式に格納する """
         self.cue_info.clear()
-
         try:
             with open(cue_filename, "r", encoding="utf-8-sig") as f:
                 cue_data = f.read()
