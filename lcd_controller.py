@@ -32,20 +32,15 @@ class LcdController:
         self.lcd_comm.DisplayBitmap(filename)
 
     def display_text(self, text: str, x: int, y: int, height: int, font: str, font_size: int, font_color: tuple, background_color: tuple):
-        """ 指定されたテキストをLCDに表示する。文字の位置、フォント、サイズ、色などを設定可能。事前に表示領域を指定された高さで塗りつぶす """
-        try:
-            self.lcd_comm.DisplayProgressBar(x=x, y=y + 1,
-                                             width=(self.canvas_width - x), height=height + 1,
-                                             min_value=0, max_value=100, value=100,
-                                             bar_outline=False, background_color=background_color)
-        except Exception as e:
-            print(f"Error displaying progress bar: {e}")
+        """ 指定されたテキストをLCDに表示する。 """
 
         self.lcd_comm.DisplayText(text, x=x, y=y,
                                   font=font,
                                   font_size=font_size,
                                   font_color=font_color,
-                                  background_color=background_color)
+                                  background_color=background_color,
+                                  width=self.canvas_width - x,
+                                  height=height)
 
 
     def display_progress_bar(self, x: int, y: int, width: int, height: int, min_value: int, max_value: int, value: int, bar_color: tuple, bar_outline: bool, background_color: tuple):

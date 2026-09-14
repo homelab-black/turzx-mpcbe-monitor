@@ -44,12 +44,17 @@ def main():
     lyrics = ""
     cue_index = -1
     assume_position = 0
+    is_show_wait_mpcbe = True
     is_preloop_has_lyrics = False
+    font = "fonts/NotoSansJP-Regular.ttf"
     try:
         while True:
             if not mpcbe_handler.is_connectable_mpcbe:
                 session = mpcbe_handler.check_mpcbe_listen()
             if session is None:
+                if is_show_wait_mpcbe:
+                    print("[INFO] MPC-BE の Web サービスに接続できるまで待機します。")
+                    is_show_wait_mpcbe = False
                 time.sleep(5)
                 continue
 
@@ -104,7 +109,7 @@ def main():
                     next_title = mpcbe_handler.tag_info.title
                 if title != next_title:
                     title = next_title
-                    lcd_controller.display_text(title, index_x + 55, index_y, 20, font="NotoSansJP-Regular.otf", font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                    lcd_controller.display_text(title, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                 index_y += 20
 
                 if mpcbe_handler.is_have_cue:
@@ -113,13 +118,13 @@ def main():
                     next_artist = mpcbe_handler.tag_info.artist
                 if artist != next_artist:
                     artist = next_artist
-                    lcd_controller.display_text(artist, index_x + 55, index_y, 20, font="NotoSansJP-Regular.otf", font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                    lcd_controller.display_text(artist, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                 index_y += 20
 
                 next_album = mpcbe_handler.tag_info.album
                 if album != next_album:
                     album = next_album
-                    lcd_controller.display_text(album, index_x + 55, index_y, 20, font="NotoSansJP-Regular.otf", font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                    lcd_controller.display_text(album, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                 index_y += 20
 
                 audio_parts: list[str] = [
@@ -134,13 +139,13 @@ def main():
 
                 if audio != audio_tmp:
                     audio = audio_tmp
-                    lcd_controller.display_text(audio, index_x + 55, index_y, 20, font="NotoSansJP-Regular.otf", font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                    lcd_controller.display_text(audio, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                 index_y += 20
 
                 length_tmp = f"{(mpcbe_handler.tag_info.length // 60)} min {(mpcbe_handler.tag_info.length % 60)}  sec"
                 if length != length_tmp:
                     length = length_tmp
-                    lcd_controller.display_text(length, index_x + 55, index_y, 20, font="NotoSansJP-Regular.otf", font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                    lcd_controller.display_text(length, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                 mpcbe_handler.is_change_music = False
                 mpcbe_handler.is_change_picture = False
 
@@ -175,7 +180,7 @@ def main():
                                     lyrics_index = mpcbe_handler.find_current_index(assume_position=assume_position, time_list=mpcbe_handler.lyrics)
                                 if lyrics_index < len(mpcbe_handler.lyrics) and ((mpcbe_handler.lyrics[lyrics_index][0] - assume_position <= 0) or (mpcbe_handler.lyrics[lyrics_index][0] - assume_position < 50)) :
                                     if lyrics != mpcbe_handler.lyrics[lyrics_index][1]:
-                                        lcd_controller.display_text(mpcbe_handler.lyrics[lyrics_index][1], 4, 452, 20, font="NotoSansJP-Regular.otf", font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                                        lcd_controller.display_text(mpcbe_handler.lyrics[lyrics_index][1], 4, 452, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                                         lyrics = mpcbe_handler.lyrics[lyrics_index][1]
                                         lyrics_index += 1
                                 time.sleep(0.1)
@@ -196,7 +201,7 @@ def main():
         lcd_controller.reset()
 
 def mpcbe_abort_handler(signum, frame) -> None:
-    print("\n[INFO] OSよりCtrl+Cの割り込みを検出。即座にプロセスを強制終了します。")
+    print("[INFO] OSよりCtrl+Cの割り込みを検出。即座にプロセスを強制終了します。")
     sys.exit(0)
 
 if __name__ == "__main__":
@@ -204,6 +209,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[INFO] Ctrl+C を検知しました。プログラムを安全に終了します。")
+        print("[INFO] Ctrl+C を検知しました。プログラムを安全に終了します。")
     except Exception as e:
-        print(f"\n[ERROR] 予期せぬエラーが発生しました: {e}")
+        print(f"[ERROR] 予期せぬエラーが発生しました: {e}")

@@ -269,7 +269,7 @@ class MpcbeHandler:
                 draw = ImageDraw.Draw(canvas)
                 index_x = 4
                 index_y = 324
-                font = ImageFont.truetype("segoeui.ttf", 14)
+                font = ImageFont.truetype("segoeui", 14)
                 draw.text((index_x, index_y), "Title", font=font, fill=(255, 255, 255))
                 draw.text((index_x + 44, index_y), " : ", font=font, fill=(255, 255, 255))
                 index_y += 20
@@ -299,6 +299,7 @@ class MpcbeHandler:
             lyrics_path = lyrics_path.parent / "Lyrics" / lyrics_path.name
             self.is_have_lyrics = True
         else:
+            self.is_have_lyrics = False
             return
 
         detected_encoding: str = "utf-8"
