@@ -20,8 +20,9 @@ import sys
 import time
 from pathlib import Path
 
-from mpcbe_monitor import MpcbeHandler
 from lcd_controller import LcdController
+from library.log import logger
+from mpcbe_monitor import MpcbeHandler
 
 def main():
     """ メイン処理 """
@@ -46,14 +47,14 @@ def main():
     assume_position = 0
     is_show_wait_mpcbe = True
     is_preloop_has_lyrics = False
-    font = "fonts/NotoSansJP-Regular.ttf"
+    font = Path(__file__).parent / "fonts/NotoSansJP-Regular.ttf"
     try:
         while True:
             if not mpcbe_handler.is_connectable_mpcbe:
                 session = mpcbe_handler.check_mpcbe_listen()
             if session is None:
                 if is_show_wait_mpcbe:
-                    print("[INFO] MPC-BE の Web サービスに接続できるまで待機します。")
+                    logger.info("MPC-BE の Web サービスに接続できるまで待機します。MPC-BEが起動されている場合は Web サービス有効になっていません。")
                     is_show_wait_mpcbe = False
                 time.sleep(5)
                 continue
@@ -192,7 +193,7 @@ def main():
                                 break
 
                 except Exception as e:
-                    print(f"進捗バーの表示でエラー？ Duration : {mpcbe_handler.mpcbe_duration} , Position: {mpcbe_handler.mpcbe_position}, AssumePosition: {assume_position}, {e}")
+                    logger.debug(f"進捗バーの表示でエラー？ Duration : {mpcbe_handler.mpcbe_duration} , Position: {mpcbe_handler.mpcbe_position}, AssumePosition: {assume_position}, {e}")
             else:
                 time.sleep(5.0)
     finally:
@@ -201,7 +202,7 @@ def main():
         lcd_controller.reset()
 
 def mpcbe_abort_handler(signum, frame) -> None:
-    print("[INFO] OSよりCtrl+Cの割り込みを検出。即座にプロセスを強制終了します。")
+    logger.info("OSよりCtrl+Cの割り込みを検出。プロセスを強制終了します。")
     sys.exit(0)
 
 if __name__ == "__main__":
@@ -209,6 +210,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("[INFO] Ctrl+C を検知しました。プログラムを安全に終了します。")
+        logger.info("Ctrl+C を検知しました。プログラムを終了します。")
     except Exception as e:
-        print(f"[ERROR] 予期せぬエラーが発生しました: {e}")
+        logger.error(f"予期せぬエラーが発生しました: {e}")

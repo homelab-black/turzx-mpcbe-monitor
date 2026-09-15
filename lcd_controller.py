@@ -33,8 +33,8 @@ class LcdController:
 
     def display_text(self, text: str, x: int, y: int, height: int, font: str, font_size: int, font_color: tuple, background_color: tuple):
         """ 指定されたテキストをLCDに表示する。 """
-
-        self.lcd_comm.DisplayText(text, x=x, y=y,
+        self.lcd_comm.DisplayText(text, x=x,
+                                  y=y,
                                   font=font,
                                   font_size=font_size,
                                   font_color=font_color,
@@ -45,10 +45,16 @@ class LcdController:
 
     def display_progress_bar(self, x: int, y: int, width: int, height: int, min_value: int, max_value: int, value: int, bar_color: tuple, bar_outline: bool, background_color: tuple):
         """ 指定されたパラメータに基づいてLCDに進行バーを表示。バーの位置、サイズ、範囲、値、色などを設定で可能 """
-        self.lcd_comm.DisplayProgressBar(x=x, y=y,
-                                         width=width, height=height,
-                                         min_value=min_value, max_value=max_value, value=value,
-                                         bar_color=bar_color, bar_outline=bar_outline, background_color=background_color)
+        self.lcd_comm.DisplayProgressBar(x=x,
+                                         y=y,
+                                         width=width,
+                                         height=height,
+                                         min_value=min_value,
+                                         max_value=max_value,
+                                         value=value,
+                                         bar_color=bar_color,
+                                         bar_outline=bar_outline,
+                                         background_color=background_color)
 
     def reset(self):
         """ LCDの通信をリセット """

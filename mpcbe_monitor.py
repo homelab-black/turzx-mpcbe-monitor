@@ -29,6 +29,8 @@ import taglib
 from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 
+from library.log import logger
+
 @dataclass
 class TagInfo:
     file_extension: str
@@ -39,7 +41,6 @@ class TagInfo:
     sample_rate: float = 0.0
     bitrate: float = 0.0
     bits_per_sample: int = 0
-
 
 class MpcbeHandler:
     def __init__(self, hostname: str, port: int, work_dirname: str, default_pictures: str):
@@ -71,7 +72,7 @@ class MpcbeHandler:
         for conn in psutil.net_connections(kind="inet"):
             if conn.laddr.port == self.port and conn.status == psutil.CONN_LISTEN:
                 self.is_connectable_mpcbe = True
-                print(f"MPC-BEに接続可能なため処理を開始します。")
+                logger.info("MPC-BEに接続可能なため処理を開始します。")
                 return session
         self.is_connectable_mpcbe = False
         session.close()
@@ -87,7 +88,7 @@ class MpcbeHandler:
             response = session.get(url, timeout=10)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"URL の取得に失敗しました。MPC-BEに再接続可能になるまで待機します。 {e}")
+            logger.warning(f"URL の取得に失敗しました。MPC-BEに再接続可能になるまで待機します。 {e}")
             self.is_connectable_mpcbe = False
             return
 
@@ -111,7 +112,7 @@ class MpcbeHandler:
         try:
             tag_info = taglib.File(self.mpcbe_filepath)
         except Exception:
-            print(f"taglib未対応のファイルです。 {self.mpcbe_filepath}")
+            logger.warning(f"taglib未対応のファイルです。 {self.mpcbe_filepath}")
             self.tag_info.title = "Not Support Format"
             self.tag_info.artist = "Not Support Format"
             self.tag_info.album = "Not Support Format"
@@ -130,7 +131,7 @@ class MpcbeHandler:
             self.tag_info.bitrate = None
             self.tag_info.length = math.ceil(self.mpcbe_duration / 1000)
             self.tag_info.bits_per_sample = None
-            print(f"mutagen未対応のファイルです。 {self.mpcbe_filepath}")
+            logger.warning(f"mutagen未対応のファイルです。 {self.mpcbe_filepath}")
         
         self.tag_info.sample_rate = round(float(audio_info.sample_rate) / 1000, 1) if hasattr(audio_info, "sample_rate") else None
         self.tag_info.bitrate = round(float(audio_info.bitrate) / 1000, 1) if hasattr(audio_info, "bitrate") else None
@@ -186,31 +187,29 @@ class MpcbeHandler:
                 list_files = list(current_dir.iterdir()) if current_dir.is_dir() else []
 
                 # 優先順位順の条件リスト (キーワード, 拡張子)
-                # Folder.jpg はキーワードが "folder" で拡張子が ".jpg" と定義
                 list_conditions = [
+                    ("folder", ".jpg"),
+                    ("folder", ".png"),
+                    ("folder", ".jpeg"),
                     ("cover", ".png"),
                     ("cover", ".jpg"),
                     ("cover", ".jpeg"),
                     ("front", ".png"),
                     ("front", ".jpg"),
                     ("front", ".jpeg"),
-                    ("folder", ".png"),
-                    ("folder", ".jpg"),
-                    ("folder", ".jpeg"),
                 ]
 
                 # 条件に合致する最初の1枚を特定する
-                target_picture = next(
-                    (
-                        obj_p for str_key, str_suf in list_conditions
-                        for obj_p in list_files
-                        if (str_key in obj_p.name.lower() and obj_p.suffix.lower() == str_suf)
-                        # Folder.jpg の完全一致に対応するため、Folder.jpg の時だけ完全一致にする場合は以下
-                        if (str_key == "folder" and obj_p.name.lower() == "folder.jpg") or 
-                        (str_key != "folder" and str_key in obj_p.name.lower() and obj_p.suffix.lower() == str_suf)
-                    ),
-                    None
-                )
+                target_picture = None
+                for str_key, str_suf in list_conditions:
+                    for obj_p in list_files:
+                        # キーがファイル名に含まれ、かつ拡張子が一致するか
+                        if str_key in obj_p.name.lower() and obj_p.suffix.lower() == str_suf:
+                            target_picture = obj_p
+                            break
+                            
+                    if target_picture is not None:
+                        break
 
                 # 画像ファイルが見つからなかった場合はデフォルトの画像をランダムで抽出
                 if target_picture is None:
@@ -219,7 +218,8 @@ class MpcbeHandler:
                     if files:
                         target_picture = random.choice(files)
                     else:
-                        print("デフォルト背景が選択できませんでした")
+                        logger.error("デフォルト背景が選択できませんでした。")
+
                 with open(target_picture, 'rb') as f:
                     image_bytes = f.read()
                     picture_data = image_bytes
@@ -232,7 +232,7 @@ class MpcbeHandler:
                     try:
                         os.remove(self.picture_filename)
                     except:
-                        print(f"Failed file remove: {self.picture_filename}")
+                        logger.error(f"Failed file remove: {self.picture_filename}")
                 self.picture_filename = f"{self.work_dirname}/{hash_value}.png"
                 if self.is_first_run:
                     self.is_first_run = False
