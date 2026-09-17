@@ -169,11 +169,11 @@ def main():
                                                             bar_color=(64, 64, 64), bar_outline=True,
                                                             background_color=(0, 0, 0))
                         if mpcbe_handler.mpcbe_status != 2:
-                            time.sleep(0.5)
+                            time.sleep(1.0)
                             lyrics_index = -1
                             continue
                         if mpcbe_handler.is_have_lyrics:
-                            for _ in range(50):
+                            for _ in range(10):
                                 assume_position = mpcbe_handler.mpcbe_position + (int)((time.time() - start_time) * 1000)
                                 if mpcbe_handler.mpcbe_duration < assume_position:
                                     break

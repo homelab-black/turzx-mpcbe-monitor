@@ -159,8 +159,6 @@ class MpcbeHandler:
             # 歌詞の読み込み(曲データまたは歌詞データがあれば)
             if "LYRICS" in tag_info.tags:
                 self.read_lyrics(tag_info.tags["LYRICS"][0])
-                if len(self.lyrics) != 0:
-                    self.is_have_lyrics = True
             else:
                 self.check_lyrics()
 
@@ -292,12 +290,11 @@ class MpcbeHandler:
 
     def check_lyrics(self):
         """ 音楽ファイルに対応する歌詞ファイルの存在を確認し、有れば、歌詞データの取り込みを呼び出す """
-        lyrics_path = Path(self.mpcbe_filepath).with_suffix(".lrc")
-        if lyrics_path.exists():
-            self.is_have_lyrics = True
-        elif (lyrics_path.parent / "Lyrics" / lyrics_path.name).exists():
-            lyrics_path = lyrics_path.parent / "Lyrics" / lyrics_path.name
-            self.is_have_lyrics = True
+        check_lyrics_path = Path(self.mpcbe_filepath).with_suffix(".lrc")
+        if check_lyrics_path.exists():
+            lyrics_path = check_lyrics_path
+        elif (check_lyrics_path.parent / "Lyrics" / check_lyrics_path.name).exists():
+            lyrics_path = check_lyrics_path.parent / "Lyrics" / check_lyrics_path.name
         else:
             self.is_have_lyrics = False
             return
@@ -333,6 +330,11 @@ class MpcbeHandler:
                     result[ms] = lyric
         if len(result) != 0:
             self.lyrics = list(sorted(result.items()))
+            self.is_have_lyrics = True
+        else:
+            self.lyrics = result
+            self.is_have_lyrics = False
+            logger.warning(f"歌詞のフォーマットにタイムスタンプがありませんでした。\n{lyrics}")
 
     def read_cuefile(self, cue_filename: Path):
         """ CUEファイルの内容をリスト形式に格納する """
