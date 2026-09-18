@@ -26,7 +26,7 @@ from mpcbe_monitor import MpcbeHandler
 
 def main():
     """ メイン処理 """
-    mpcbe_handler = MpcbeHandler(hostname="127.0.0.1", port=13579, work_dirname="tmp", default_pictures=Path(__file__).parent / "default_png")
+    mpcbe_handler = MpcbeHandler(hostname="127.0.0.1", port=13579, work_dirname=Path(__file__).parent / "tmp", default_pictures=Path(__file__).parent / "default_png")
     lcd_controller = LcdController(com_port="AUTO", display_width=320, display_height=480)
 
     # ワークディレクトリの再作成
