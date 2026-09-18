@@ -16,9 +16,10 @@ https://github.com/mathoudebine/turing-smart-screen-python/tree/main
 ### TURZX は縦置きを想定
 
 ### 実行方法
+```
 pip install -r requirements.txt
 python main.py
-
+```
 ### その他
 動作内容は以下の通りです。
 1. MPC-BE のウェブサーバにアクセスして以下の情報を取得
