@@ -18,18 +18,20 @@ import time
 from library.lcd.lcd_comm_rev_a import LcdCommRevA
 
 class LcdController:
-    def __init__(self, com_port: str, display_width: int, display_height: int):
+    def __init__(self, com_port: str, display_width: int, display_height: int, display_brightness:int=25):
         """ LCDコントローラーのインスタンスを初期化し、LCDの通信を設定 """
         self.lcd_comm = LcdCommRevA(com_port=com_port,
                                     display_width=display_width,
                                     display_height=display_height)
         self.lcd_comm.InitializeComm()
+        self.lcd_comm.ScreenOn()
         self.canvas_width = display_width
         self.canvas_height = display_height
+        self.lcd_comm.SetBrightness(level=display_brightness)
 
     # 指定されたファイル名のビットマップ画像をLCDに表示します。
-    def display_bitmap(self, filename: str):
-        self.lcd_comm.DisplayBitmap(filename)
+    def display_bitmap(self, filename: str, width: int=0, height: int=0):
+        self.lcd_comm.DisplayBitmap(filename, width=width, height=height)
 
     def display_text(self, text: str, x: int, y: int, height: int, font: str, font_size: int, font_color: tuple, background_color: tuple):
         """ 指定されたテキストをLCDに表示する。 """
@@ -61,3 +63,5 @@ class LcdController:
         self.lcd_comm.closeSerial
         time.sleep(1.0)
         self.lcd_comm.Reset()
+        self.lcd_comm.ScreenOff()
+    

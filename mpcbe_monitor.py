@@ -62,6 +62,8 @@ class MpcbeHandler:
         self.is_have_lyrics = False
         self.picture_hash = ""
         self.picture_filename = ""
+        self.picture_width = 0
+        self.picture_height = 0
         self.lyrics = []
         self.preview_time = -50
         self.cue_info = []
@@ -106,9 +108,8 @@ class MpcbeHandler:
         p_tag = soup.find("p", id="duration")
         self.mpcbe_duration = int(p_tag.get_text(strip=True))
 
-    def extract_info(self):
+    def extract_info(self, is_468_mode:bool):
         """ ファイルから各種情報を取得する """
-        picture = None
         try:
             tag_info = taglib.File(self.mpcbe_filepath)
         except Exception:
@@ -223,8 +224,15 @@ class MpcbeHandler:
                     picture_data = image_bytes
                 
             # 画像の読み込み
-            picture_bytes_io = self.create_background(picture_data)
-            hash_value = hashlib.md5(picture_bytes_io).hexdigest()
+            hash_value = hashlib.md5(picture_data).hexdigest()
+            if self.is_first_run:
+                picture_bytes_io = self.create_background(picture_data, is_468_mode)
+                self.picture_width = 320
+                self.picture_height = 480
+            else:
+                picture_bytes_io = picture_data
+                self.picture_width = 320
+                self.picture_height = 320
             if self.picture_hash != hash_value:
                 if os.path.exists(self.picture_filename):
                     try:
@@ -234,13 +242,12 @@ class MpcbeHandler:
                 self.picture_filename = f"{self.work_dirname}/{hash_value}.png"
                 if self.is_first_run:
                     self.is_first_run = False
-                else:
-                    self.picture_hash = hash_value
+                self.picture_hash = hash_value
                 self.is_change_picture = True
                 with open(self.picture_filename, "wb") as f:
                     f.write(picture_bytes_io)
 
-    def create_background(self, picture_data) -> bytes:
+    def create_background(self, picture_data, is_468_mode:bool) -> bytes:
         """ MPC-BEから取得したタグ情報から背景を描画する """
         with Image.open(io.BytesIO(picture_data)) as image:
             short_length = 320
@@ -259,27 +266,26 @@ class MpcbeHandler:
             canvas.save(png_bytes_io, format="PNG")
 
             if self.is_first_run:
-                self.picture_hash = hashlib.md5(png_bytes_io.getvalue()).hexdigest()
-
                 canvas = Image.new("RGB", (320, 480), (0, 0, 0))
                 canvas.paste(image, ((short_length - image.width) // 2, (short_length - image.height) // 2))
 
                 draw = ImageDraw.Draw(canvas)
                 index_x = 4
-                index_y = 324
+                index_y = 324 if not is_468_mode else 322
+                index_ncrease_y = 20 if not is_468_mode else 18
                 font = ImageFont.truetype("segoeui", 14)
                 draw.text((index_x, index_y), "Title", font=font, fill=(255, 255, 255))
                 draw.text((index_x + 44, index_y), " : ", font=font, fill=(255, 255, 255))
-                index_y += 20
+                index_y += index_ncrease_y
                 draw.text((index_x, index_y), "Artist", font=font, fill=(255, 255, 255))
                 draw.text((index_x + 44, index_y), " : ", font=font, fill=(255, 255, 255))
-                index_y += 20
+                index_y += index_ncrease_y
                 draw.text((index_x, index_y), "Album", font=font, fill=(255, 255, 255))
                 draw.text((index_x + 44, index_y), " : ", font=font, fill=(255, 255, 255))
-                index_y += 20
+                index_y += index_ncrease_y
                 draw.text((index_x, index_y), "Audio", font=font, fill=(255, 255, 255))
                 draw.text((index_x + 44, index_y), " : ", font=font, fill=(255, 255, 255))
-                index_y += 20
+                index_y += index_ncrease_y
                 draw.text((index_x, index_y), "Length", font=font, fill=(255, 255, 255))
                 draw.text((index_x + 44, index_y), " : ", font=font, fill=(255, 255, 255))
 

@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://gnu.org>.
 
+import argparse
 import requests
 import shutil
 import signal
@@ -24,10 +25,9 @@ from lcd_controller import LcdController
 from library.log import logger
 from mpcbe_monitor import MpcbeHandler
 
-def main():
-    """ メイン処理 """
+def main(is_468_mode:bool=False):
+    """ メイン処理 (引数に True を追加すると縦の解像度を 468 としてレイアウトを行う。(TURNZX 9.2 を横向きで分割して利用することを想定したオプション)) """
     mpcbe_handler = MpcbeHandler(hostname="127.0.0.1", port=13579, work_dirname=Path(__file__).parent / "tmp", default_pictures=Path(__file__).parent / "default_png")
-    lcd_controller = LcdController(com_port="AUTO", display_width=320, display_height=480)
 
     # ワークディレクトリの再作成
     dir_path = Path(mpcbe_handler.work_dirname)
@@ -67,10 +67,10 @@ def main():
                 
             if mpcbe_handler.is_change_music:
                 index_x = 4
-                index_y = 430
+                index_y = 430 if not is_468_mode else 420
                 assume_position = mpcbe_handler.mpcbe_position
                 lyrics_index = -1
-                mpcbe_handler.extract_info()
+                mpcbe_handler.extract_info(is_468_mode)
                 if mpcbe_handler.mpcbe_duration == 0:
                     # duration が 0 というのは通常あり得ないので、再読み込みを実施する
                     time.sleep(1.0)
@@ -83,27 +83,29 @@ def main():
                     if cue_old_index == cue_index:
                         mpcbe_handler.is_change_picture = False
                 if mpcbe_handler.is_change_picture:
-                    lcd_controller.display_bitmap(mpcbe_handler.picture_filename)
+                    lcd_controller.display_bitmap(mpcbe_handler.picture_filename, width=mpcbe_handler.picture_width, height=mpcbe_handler.picture_height)
                     time.sleep(0.2)
                 if not mpcbe_handler.is_have_lyrics and is_preloop_has_lyrics:
                     # 直前の曲が歌詞があり、今回は無い場合歌詞表示時のプログレスバーのごみが残らないようにする
                     lcd_controller.display_progress_bar(x=0, y=index_y,
-                                                        width=lcd_controller.canvas_width, height=50,
+                                                        width=lcd_controller.canvas_width, height=(50 if not is_468_mode else 48),
                                                         min_value=0, max_value=100, value=100,
                                                         bar_color=(0, 0, 0), bar_outline=False, background_color=(0, 0, 0))
                     is_preloop_has_lyrics = False
                 if mpcbe_handler.is_have_lyrics:
                     lcd_controller.display_progress_bar(x=0, y=index_y,
-                                                        width=lcd_controller.canvas_width, height=50,
+                                                        width=lcd_controller.canvas_width, height=(50 if not is_468_mode else 48),
                                                         min_value=0, max_value=100, value=100,
                                                         bar_color=(0, 0, 0), bar_outline=False, background_color=(0, 0, 0))
-                    lcd_controller.display_progress_bar(x=0, y=450,
+                    lcd_controller.display_progress_bar(x=0, y=index_y + 20,
                                                         width=lcd_controller.canvas_width, height=1,
                                                         min_value=0, max_value=100, value=100,
                                                         bar_color=(192, 192, 192), bar_outline=False, background_color=(0, 0, 0))
                     is_preloop_has_lyrics = True
                         
-                index_y = 324
+                index_y = 324 if not is_468_mode else 322
+                index_ncrease_y = 20 if not is_468_mode else 18
+
                 if mpcbe_handler.is_have_cue:
                     next_title = mpcbe_handler.cue_info[cue_index][1]["title"]
                 else:
@@ -111,7 +113,7 @@ def main():
                 if title != next_title:
                     title = next_title
                     lcd_controller.display_text(title, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
-                index_y += 20
+                index_y += index_ncrease_y
 
                 if mpcbe_handler.is_have_cue:
                     next_artist = mpcbe_handler.cue_info[cue_index][1]["artist"]
@@ -120,13 +122,13 @@ def main():
                 if artist != next_artist:
                     artist = next_artist
                     lcd_controller.display_text(artist, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
-                index_y += 20
+                index_y += index_ncrease_y
 
                 next_album = mpcbe_handler.tag_info.album
                 if album != next_album:
                     album = next_album
                     lcd_controller.display_text(album, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
-                index_y += 20
+                index_y += index_ncrease_y
 
                 audio_parts: list[str] = [
                     f"{mpcbe_handler.tag_info.file_extension}",
@@ -141,7 +143,7 @@ def main():
                 if audio != audio_tmp:
                     audio = audio_tmp
                     lcd_controller.display_text(audio, index_x + 55, index_y, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
-                index_y += 20
+                index_y += index_ncrease_y
 
                 length_tmp = f"{(mpcbe_handler.tag_info.length // 60)} min {(mpcbe_handler.tag_info.length % 60)}  sec"
                 if length != length_tmp:
@@ -152,9 +154,9 @@ def main():
 
             if mpcbe_handler.mpcbe_duration != mpcbe_handler.mpcbe_position:
                 if mpcbe_handler.is_have_lyrics:
-                    index_y = 430
+                    index_y = 430 if not is_468_mode else 422
                 else:
-                    index_y = 445
+                    index_y = 445 if not is_468_mode else 436
 
                 # 早送り、巻き戻しの検出
                 if abs(mpcbe_handler.mpcbe_position - assume_position) > 5 * 1000 * 2:
@@ -169,6 +171,7 @@ def main():
                                                             bar_color=(64, 64, 64), bar_outline=True,
                                                             background_color=(0, 0, 0))
                         if mpcbe_handler.mpcbe_status != 2:
+                            # 一時停止中
                             time.sleep(1.0)
                             lyrics_index = -1
                             continue
@@ -181,7 +184,7 @@ def main():
                                     lyrics_index = mpcbe_handler.find_current_index(assume_position=assume_position, time_list=mpcbe_handler.lyrics)
                                 if lyrics_index < len(mpcbe_handler.lyrics) and ((mpcbe_handler.lyrics[lyrics_index][0] - assume_position <= 0) or (mpcbe_handler.lyrics[lyrics_index][0] - assume_position < 50)) :
                                     if lyrics != mpcbe_handler.lyrics[lyrics_index][1]:
-                                        lcd_controller.display_text(mpcbe_handler.lyrics[lyrics_index][1], 4, 452, 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
+                                        lcd_controller.display_text(mpcbe_handler.lyrics[lyrics_index][1], 0, (455 if not is_468_mode else 442), 20, font=font, font_size=14, font_color=(255, 255, 255), background_color=(0, 0, 0))
                                         lyrics = mpcbe_handler.lyrics[lyrics_index][1]
                                         lyrics_index += 1
                                 time.sleep(0.1)
@@ -191,7 +194,6 @@ def main():
                                 time.sleep(1.0)
                             elif mpcbe_handler.mpcbe_duration < assume_position:
                                 break
-
                 except Exception as e:
                     logger.debug(f"進捗バーの表示でエラー？ Duration : {mpcbe_handler.mpcbe_duration} , Position: {mpcbe_handler.mpcbe_position}, AssumePosition: {assume_position}, {e}")
             else:
@@ -202,14 +204,32 @@ def main():
         lcd_controller.reset()
 
 def mpcbe_abort_handler(signum, frame) -> None:
-    logger.info("OSよりCtrl+Cの割り込みを検出。プロセスを強制終了します。")
+    logger.info("OSよりCtrl+Cの割り込みを検出。プロセスを終了します。")
     sys.exit(0)
+
+def restricted_brightness(val:str):
+    """ 1から100までの整数に制限する関数 """
+    
+    try:
+        if not (1 <= int(val) <= 100):
+            raise argparse.ArgumentTypeError(f"{val} は 1 から 100 の整数で指定してください。")
+        return int(val)
+    except Exception as e:
+        raise argparse.ArgumentTypeError(f"{val} は 1 から 100 の整数で指定してください。")
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, mpcbe_abort_handler)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-b", "--brightness", metavar="val", default=25, help="brightness level (1 - 100) (default: 25)", type=restricted_brightness)
+    parser.add_argument("--mode_468", default=False, help="height is 468px mode (for TURZX 9.2)", action="store_true")
+    args = parser.parse_args()
+
     try:
-        main()
+        lcd_controller = LcdController(com_port="AUTO", display_width=320, display_height=480, display_brightness=args.brightness)
+        main(is_468_mode=args.mode_468)
     except KeyboardInterrupt:
         logger.info("Ctrl+C を検知しました。プログラムを終了します。")
+        sys.exit(0)
     except Exception as e:
         logger.error(f"予期せぬエラーが発生しました: {e}")
+        sys.exit(100)
